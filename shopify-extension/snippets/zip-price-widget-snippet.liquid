@@ -1,0 +1,94 @@
+{% comment %}
+  Fallback snippet: zip-price-widget-snippet.liquid
+  Usage: Add this to your product.liquid or product-template.liquid
+  Place it after the {{ product.price | money }} line.
+
+  {% render 'zip-price-widget-snippet', product: product %}
+{% endcomment %}
+
+{% assign api_url = 'https://your-app.up.railway.app' %}
+
+<div
+  id="zip-price-widget"
+  data-product-id="{{ product.id }}"
+>
+  <div class="zip-price-row">
+    <span class="zip-price-label">Price:</span>
+    <span id="zip-price-display" class="zip-price-value">{{ product.price | money }}</span>
+  </div>
+
+  <div class="zip-input-row">
+    <input
+      type="text"
+      id="zip-input"
+      placeholder="Enter ZIP code"
+      maxlength="10"
+      aria-label="Enter ZIP code to check price"
+    />
+    <button id="zip-btn" type="button">Check Price</button>
+  </div>
+
+  <p id="zip-msg" role="status" aria-live="polite" style="margin:8px 0 0;font-size:13px;min-height:18px;"></p>
+</div>
+
+<style>
+  #zip-price-widget { margin: 16px 0; }
+  .zip-price-row    { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .zip-price-label  { font-size:14px; color:#6b7280; }
+  .zip-price-value  { font-size:24px; font-weight:700; color:#111827; }
+  .zip-input-row    { display:flex; gap:8px; }
+  #zip-input {
+    border:1px solid #d1d5db; border-radius:6px;
+    padding:10px 14px; font-size:15px; width:150px;
+    outline:none;
+  }
+  #zip-input:focus { border-color:#3b82f6; }
+  #zip-btn {
+    background:#111827; color:#fff; border:none;
+    border-radius:6px; padding:10px 20px;
+    font-size:15px; font-weight:600; cursor:pointer;
+  }
+  #zip-btn:hover    { background:#374151; }
+  #zip-btn:disabled { opacity:.6; cursor:not-allowed; }
+</style>
+
+<script>
+(function(){
+  var API = {{ api_url | json }};
+  var pid = "{{ product.id }}";
+  var input = document.getElementById('zip-input');
+  var btn   = document.getElementById('zip-btn');
+  var price = document.getElementById('zip-price-display');
+  var msg   = document.getElementById('zip-msg');
+
+  function status(text, color){
+    msg.textContent = text;
+    msg.style.color = color || '#6b7280';
+  }
+
+  btn.addEventListener('click', function(){
+    var zip = input.value.trim();
+    if(!zip){ status('Please enter a ZIP code.','#dc2626'); return; }
+    if(!/^\d{5}$/.test(zip)){ status('Enter a valid 5-digit ZIP.','#dc2626'); return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+    status('Fetching price...','#6b7280');
+
+    fetch(API + '/api/get-price', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({productId:pid, zipCode:zip})
+    })
+    .then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(d){
+      price.textContent = '$' + d.price.toLocaleString('en-US');
+      status('Price for ZIP ' + zip + ' updated.','#16a34a');
+    })
+    .catch(function(){ status('Error fetching price. Try again.','#dc2626'); })
+    .finally(function(){ btn.disabled=false; btn.textContent='Check Price'; });
+  });
+
+  input.addEventListener('keydown', function(e){ if(e.key==='Enter') btn.click(); });
+})();
+</script>

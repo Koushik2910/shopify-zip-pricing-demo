@@ -1,0 +1,209 @@
+{% comment %}
+  ZIP Code Based Pricing Widget
+  Shopify Theme App Extension Block
+  Place this block in: shopify-extension/blocks/zip-price-widget.liquid
+{% endcomment %}
+
+<div
+  id="zip-price-widget"
+  class="zip-price-widget"
+  data-product-id="{{ product.id }}"
+  data-api-url="{{ block.settings.api_url }}"
+>
+  <div class="zip-price-widget__price-row">
+    <span class="zip-price-widget__label">Price:</span>
+    <span id="zip-displayed-price" class="zip-price-widget__price">
+      {{ product.price | money }}
+    </span>
+  </div>
+
+  <div class="zip-price-widget__input-row">
+    <input
+      type="text"
+      id="zip-code-input"
+      class="zip-price-widget__input"
+      placeholder="Enter ZIP code"
+      maxlength="10"
+      aria-label="ZIP code"
+    />
+    <button
+      id="zip-check-btn"
+      class="zip-price-widget__btn"
+      type="button"
+    >
+      Check Price
+    </button>
+  </div>
+
+  <div id="zip-status" class="zip-price-widget__status" role="status" aria-live="polite"></div>
+</div>
+
+<style>
+  .zip-price-widget {
+    margin: 16px 0;
+    font-family: inherit;
+  }
+  .zip-price-widget__price-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .zip-price-widget__label {
+    font-size: 14px;
+    color: #6b7280;
+  }
+  .zip-price-widget__price {
+    font-size: 24px;
+    font-weight: 700;
+    color: #111827;
+    transition: color 0.2s ease;
+  }
+  .zip-price-widget__price.updating {
+    color: #9ca3af;
+  }
+  .zip-price-widget__input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .zip-price-widget__input {
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 15px;
+    width: 150px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .zip-price-widget__input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+  }
+  .zip-price-widget__btn {
+    background: #111827;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+  }
+  .zip-price-widget__btn:hover {
+    background: #374151;
+  }
+  .zip-price-widget__btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .zip-price-widget__status {
+    margin-top: 8px;
+    font-size: 13px;
+    min-height: 20px;
+  }
+  .zip-price-widget__status.success { color: #16a34a; }
+  .zip-price-widget__status.error   { color: #dc2626; }
+  .zip-price-widget__status.loading { color: #6b7280; }
+</style>
+
+<script>
+(function () {
+  var widget     = document.getElementById('zip-price-widget');
+  var input      = document.getElementById('zip-code-input');
+  var btn        = document.getElementById('zip-check-btn');
+  var priceEl    = document.getElementById('zip-displayed-price');
+  var statusEl   = document.getElementById('zip-status');
+
+  var productId  = widget.dataset.productId;
+  var API_URL    = widget.dataset.apiUrl;
+
+  if (!API_URL) {
+    console.warn('[ZIP Pricing] api_url block setting is empty.');
+  }
+
+  function formatPrice(cents) {
+    return '$' + (cents).toLocaleString('en-US');
+  }
+
+  function setStatus(message, type) {
+    statusEl.textContent = message;
+    statusEl.className   = 'zip-price-widget__status ' + (type || '');
+  }
+
+  function setLoading(isLoading) {
+    btn.disabled = isLoading;
+    btn.textContent = isLoading ? 'Checking...' : 'Check Price';
+    if (isLoading) {
+      priceEl.classList.add('updating');
+      setStatus('Looking up price for your ZIP code...', 'loading');
+    } else {
+      priceEl.classList.remove('updating');
+    }
+  }
+
+  function checkPrice() {
+    var zip = input.value.trim();
+
+    if (!zip) {
+      setStatus('Please enter a ZIP code.', 'error');
+      input.focus();
+      return;
+    }
+
+    if (!/^\d{5}(-\d{4})?$/.test(zip)) {
+      setStatus('Please enter a valid 5-digit ZIP code.', 'error');
+      input.focus();
+      return;
+    }
+
+    setLoading(true);
+
+    fetch(API_URL + '/api/get-price', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: productId, zipCode: zip }),
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error('Server returned ' + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        priceEl.textContent = formatPrice(data.price);
+        setStatus('Price updated for ZIP code ' + zip + '.', 'success');
+      })
+      .catch(function (err) {
+        console.error('[ZIP Pricing]', err);
+        setStatus('Unable to fetch price. Please try again.', 'error');
+      })
+      .finally(function () {
+        setLoading(false);
+      });
+  }
+
+  btn.addEventListener('click', checkPrice);
+
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') checkPrice();
+  });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "ZIP Price Checker",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "api_url",
+      "label": "Backend API URL",
+      "info": "Your Railway backend URL, e.g. https://your-app.up.railway.app",
+      "default": "https://your-app.up.railway.app"
+    }
+  ]
+}
+{% endschema %}
